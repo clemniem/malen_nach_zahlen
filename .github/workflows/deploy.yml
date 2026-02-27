@@ -1,0 +1,66 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: sbt
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Build Scala.js
+        run: sbt fullLinkJS
+
+      - name: Assemble deployable directory
+        run: |
+          mkdir -p dist/css
+          cp target/scalajs-opt/main.js dist/
+          cp target/scalajs-opt/main.js.map dist/ 2>/dev/null || true
+          cp css/style.css dist/css/
+          sed "s/__BUILD_TS__/$(date +%s)/" sw.js > dist/sw.js
+          echo "import { TyrianApp } from './main.js';" > dist/loader.js
+          echo "TyrianApp.launch(\"myapp\");" >> dist/loader.js
+
+          # Copy index.html and replace dev scripts block with production scripts.
+          cp index.html dist/index.html
+          python3 -c "
+          import re, pathlib
+          idx = pathlib.Path('dist/index.html')
+          prod = pathlib.Path('deploy/prod-scripts.html').read_text().rstrip('\n')
+          html = re.sub(r'  <!-- SCRIPTS:DEV.*?<!-- SCRIPTS:END -->\n', prod + '\n', idx.read_text(), flags=re.DOTALL)
+          idx.write_text(html)
+          "
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

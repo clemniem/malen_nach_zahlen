@@ -1,0 +1,16 @@
+{
+  "name": "malen_zahlen",
+  "scripts": {
+    "start": "parcel index.html --no-cache --dist-dir dist --log-level info",
+    "build": "parcel build index.html --dist-dir dist --log-level info"
+  },
+  "dependencies": {
+    "jspdf": "^2.5.2"
+  },
+  "devDependencies": {
+    "@parcel/packager-raw-url": "2.16.3",
+    "@parcel/transformer-webmanifest": "2.16.3",
+    "parcel": "^2.1.0",
+    "process": "^0.11.10"
+  }
+}

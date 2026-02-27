@@ -1,0 +1,36 @@
+---
+description: Common Scala.js, Tyrian, and deployment pitfalls
+alwaysApply: true
+---
+
+# Pitfalls & Gotchas
+
+## Scala.js
+- **No `return`:** Use if/else or pattern match instead of early return.
+- **No `null`:** Use `Option` with `.filter` / `.getOrElse`.
+- **No `var` / `while`:** Use immutable vals, for-comprehensions, `.fold`, `.forall`.
+- **No default arguments:** Scalafix disables them. Pass all arguments explicitly.
+- **Unused parameters:** Do NOT use `@unused` annotation as a crutch. Remove unused params or make them `Option`.
+- **Varargs (Scala 3.4+):** Use `x*` splice, not deprecated `x: _*`.
+
+## Tyrian
+- **`disabled` attribute:** Tyrian may not support `disabled := true` reliably. Use conditional CSS (`cursor: not-allowed; opacity: 0.6`) or `.btn-disabled` class instead.
+- **`onLoad` placement:** `onLoad` takes a single message and must go on the **parent** element: `div(onLoad(DrawMsg))(canvas()())`. NOT `onLoad(DrawMsg)(canvas()())`.
+- **Canvas drawing timing:** Always use `drawAfterViewReady` or wait for next animation frame before drawing on a canvas. The DOM may not have the element yet when `init`/`update` runs.
+- **Reserved Scala keywords as HTML attributes:** Use backticks: `` `class` := "..." ``, `` `type` := "number" ``.
+
+## jsPDF (if PDF module enabled)
+- **Global access:** Use `js.Dynamic.global.selectDynamic("jspdf")` (lowercase). Never reference `jsPDF` (uppercase) directly.
+- **Constructor key:** Get via `val ctorKey = "js" + "PDF"` then `jspdfObj.selectDynamic(ctorKey)` to avoid Scala thinking `jsPDF` is a method call.
+- **Never assign `js.Dynamic.global`** to a variable -- it triggers unexpected evaluation.
+
+## Deployment
+- **ES modules only:** `build.sbt` must use `ModuleKind.ESModule`. Production loader uses `import { TyrianApp } from './main.js'`.
+- **Deploy index.html is generated:** The workflow replaces the dev scripts block with production scripts. Changes to `index.html` `<head>` are automatically picked up, but changes to the `<script>` block between SCRIPTS markers must also go in `deploy/prod-scripts.html`.
+- **Service worker cache busting:** `sw.js` has `__BUILD_TS__` placeholder. The deploy workflow replaces it with `$(date +%s)` via sed. Each deploy gets a unique cache name; old caches are deleted on activate.
+- **Service worker in dev:** `sw-register.js` only registers when `location.hostname !== 'localhost'` to avoid MIME/404 issues on local dev.
+
+## NES.css (if NES.css module enabled)
+- **No checkmark glyph:** Press Start 2P font lacks a checkmark. Use NES.css radio buttons (Off/On) instead of native checkboxes.
+- **Custom cursor:** All clickable elements need `cursor: var(--nes-pointer)`. This is a pixel-art hand cursor defined in `:root` in `style.css`.
+- **NES.css radio layout:** Requires `input.nes-radio` + immediate sibling `span` for the dot to render. Use `onClick` not `onInput`.
