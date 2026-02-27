@@ -28,6 +28,12 @@ object JsPDF {
             case Instruction.Text(x, y, value) =>
               docOpt.foreach(doc => { val _ = doc.text(value, x, y) })
               (docOpt, (pageW, pageH))
+            case Instruction.TextCentered(x, y, value) =>
+              docOpt.foreach { doc =>
+                val opts = js.Dynamic.literal(align = "center")
+                val _ = doc.text(value, x, y, opts)
+              }
+              (docOpt, (pageW, pageH))
             case Instruction.AddPage =>
               docOpt.foreach(doc => { val _ = doc.addPage() })
               (docOpt, (pageW, pageH))
@@ -35,6 +41,11 @@ object JsPDF {
               docOpt.foreach { doc =>
                 val _ = doc.setFillColor(r, g, b)
                 val _ = doc.rect(x, y, w, h, "F")
+              }
+              (docOpt, (pageW, pageH))
+            case Instruction.AddImage(dataUrl, x, y, w, h) =>
+              docOpt.foreach { doc =>
+                val _ = doc.addImage(dataUrl, "PNG", x, y, w, h)
               }
               (docOpt, (pageW, pageH))
             case Instruction.Save(filename) =>
