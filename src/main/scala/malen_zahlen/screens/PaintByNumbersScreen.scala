@@ -13,10 +13,12 @@ object PbnMsg {
   case object FileInputChanged                            extends PbnMsg
   case class FileSelected(dataUrl: String)                extends PbnMsg
   case class SetColorCount(n: Int)                        extends PbnMsg
+  case class SetDetailLevel(n: Int)                       extends PbnMsg
+  case class SetSmoothLevel(n: Int)                       extends PbnMsg
   case object Generate                                    extends PbnMsg
   case class ProcessingDone(result: PbnResult)            extends PbnMsg
   case class ProcessingFailed(error: String)              extends PbnMsg
-  case object ToggleOutlines                               extends PbnMsg
+  case object ToggleOutlines                              extends PbnMsg
   case object DownloadPdf                                 extends PbnMsg
   case object StartOver                                   extends PbnMsg
   case object NoOp                                        extends PbnMsg
@@ -38,6 +40,8 @@ object PaintByNumbersScreen extends Screen {
   final case class PbnModel(
       phase: Phase,
       colorCount: Int,
+      detailLevel: Int,
+      smoothLevel: Int,
       imageDataUrl: Option[String],
       result: Option[PbnResult],
       showOutlines: Boolean
@@ -45,8 +49,14 @@ object PaintByNumbersScreen extends Screen {
 
   private val FileInputId = "pbn-file-input"
 
+  private def minRegionPixelsFor(detailLevel: Int, pixelCount: Int): Int = {
+    val fraction = (detailLevel * detailLevel) / 5000.0
+    val minPx   = (pixelCount * fraction).toInt
+    Math.max(20, Math.min(pixelCount / 4, minPx))
+  }
+
   def init: (PbnModel, Cmd[IO, PbnMsg]) =
-    (PbnModel(Phase.Upload, 12, None, None, true), Cmd.None)
+    (PbnModel(Phase.Upload, 12, 5, 2, None, None, true), Cmd.None)
 
   def update(model: PbnModel): PbnMsg => (PbnModel, Cmd[IO, PbnMsg]) = {
     case PbnMsg.FileInputChanged =>
@@ -72,10 +82,19 @@ object PaintByNumbersScreen extends Screen {
     case PbnMsg.SetColorCount(n) =>
       (model.copy(colorCount = Math.max(2, Math.min(30, n))), Cmd.None)
 
+    case PbnMsg.SetDetailLevel(n) =>
+      (model.copy(detailLevel = Math.max(1, Math.min(10, n))), Cmd.None)
+
+    case PbnMsg.SetSmoothLevel(n) =>
+      (model.copy(smoothLevel = Math.max(0, Math.min(5, n))), Cmd.None)
+
     case PbnMsg.Generate =>
       model.imageDataUrl match {
         case None => (model, Cmd.None)
         case Some(dataUrl) =>
+          val detail  = model.detailLevel
+          val colors  = model.colorCount
+          val smooth  = model.smoothLevel
           val cmd = Cmd.Run[IO, PbnMsg, PbnMsg](
             IO.async_[PixelGrid] { cb =>
               ImageLoader.loadFromDataUrl(
@@ -84,7 +103,7 @@ object PaintByNumbersScreen extends Screen {
                 err => cb(Left(new Exception(err)))
               )
             }.flatMap { grid =>
-              IO(processImage(grid, model.colorCount))
+              IO(processImage(grid, colors, detail, smooth))
             }.attempt.map {
               case Right(result) => PbnMsg.ProcessingDone(result)
               case Left(err)     => PbnMsg.ProcessingFailed(err.getMessage)
@@ -117,11 +136,15 @@ object PaintByNumbersScreen extends Screen {
       (model, Cmd.None)
   }
 
-  private def processImage(grid: PixelGrid, colorCount: Int): PbnResult = {
+  private def processImage(grid: PixelGrid, colorCount: Int, detailLevel: Int, smoothLevel: Int): PbnResult = {
+    val minPx     = minRegionPixelsFor(detailLevel, grid.pixelCount)
     val palette   = MedianCut.quantize(grid, colorCount)
-    val regionMap = RegionDetector.detect(grid, palette)
+    val regionMap = RegionDetector.detect(grid, palette, minPx, smoothLevel)
     PbnRenderer.render(regionMap)
   }
+
+  private def parseSlider(s: String, minVal: Int, maxVal: Int, default: Int): Int =
+    s.trim.toIntOption.fold(default)(v => Math.max(minVal, Math.min(maxVal, v)))
 
   def view(model: PbnModel): Html[PbnMsg] =
     div(`class` := "screen-container")(
@@ -134,6 +157,40 @@ object PaintByNumbersScreen extends Screen {
           case Phase.Preview      => previewView(model)
           case Phase.Error(msg)   => errorView(msg)
         }
+      )
+    )
+
+  private def detailSlider(model: PbnModel): Html[PbnMsg] =
+    div(`class` := "color-count-row")(
+      label(`class` := "label-block")(text(s"Region size: ${model.detailLevel} (1=small, 10=large)")),
+      div(`class` := "slider-with-labels")(
+        span(`class` := "slider-label-left")(text("Small regions")),
+        input(
+          `type` := "range",
+          attribute("min", "1"),
+          attribute("max", "10"),
+          value  := model.detailLevel.toString,
+          `class` := "color-slider",
+          onInput(s => PbnMsg.SetDetailLevel(parseSlider(s, 1, 10, 5)))
+        ),
+        span(`class` := "slider-label-right")(text("Large regions"))
+      )
+    )
+
+  private def smoothSlider(model: PbnModel): Html[PbnMsg] =
+    div(`class` := "color-count-row")(
+      label(`class` := "label-block")(text(s"Edge smoothing: ${model.smoothLevel} (0=none, 5=max)")),
+      div(`class` := "slider-with-labels")(
+        span(`class` := "slider-label-left")(text("None")),
+        input(
+          `type` := "range",
+          attribute("min", "0"),
+          attribute("max", "5"),
+          value  := model.smoothLevel.toString,
+          `class` := "color-slider",
+          onInput(s => PbnMsg.SetSmoothLevel(parseSlider(s, 0, 5, 2)))
+        ),
+        span(`class` := "slider-label-right")(text("Max"))
       )
     )
 
@@ -169,9 +226,11 @@ object PaintByNumbersScreen extends Screen {
             attribute("max", "30"),
             value  := model.colorCount.toString,
             `class` := "color-slider",
-            onInput(s => PbnMsg.SetColorCount(s.toIntOption.getOrElse(12)))
+            onInput(s => PbnMsg.SetColorCount(parseSlider(s, 2, 30, 12)))
           )
-        )
+        ),
+        detailSlider(model),
+        smoothSlider(model)
       ),
       div(`class` := "generate-row")(
         button(
@@ -232,8 +291,40 @@ object PaintByNumbersScreen extends Screen {
                 attribute("max", "30"),
                 value  := model.colorCount.toString,
                 `class` := "color-slider",
-                onInput(s => PbnMsg.SetColorCount(s.toIntOption.getOrElse(12)))
-              ),
+                onInput(s => PbnMsg.SetColorCount(parseSlider(s, 2, 30, 12)))
+              )
+            ),
+            div(`class` := "adjust-colors-row")(
+              label(`class` := "label-block")(text(s"Region size: ${model.detailLevel} (1=small, 10=large)")),
+              div(`class` := "slider-with-labels")(
+                span(`class` := "slider-label-left")(text("Small regions")),
+                input(
+                  `type` := "range",
+                  attribute("min", "1"),
+                  attribute("max", "10"),
+                  value  := model.detailLevel.toString,
+                  `class` := "color-slider",
+                  onInput(s => PbnMsg.SetDetailLevel(parseSlider(s, 1, 10, 5)))
+                ),
+                span(`class` := "slider-label-right")(text("Large regions"))
+              )
+            ),
+            div(`class` := "adjust-colors-row")(
+              label(`class` := "label-block")(text(s"Edge smoothing: ${model.smoothLevel} (0=none, 5=max)")),
+              div(`class` := "slider-with-labels")(
+                span(`class` := "slider-label-left")(text("None")),
+                input(
+                  `type` := "range",
+                  attribute("min", "0"),
+                  attribute("max", "5"),
+                  value  := model.smoothLevel.toString,
+                  `class` := "color-slider",
+                  onInput(s => PbnMsg.SetSmoothLevel(parseSlider(s, 0, 5, 2)))
+                ),
+                span(`class` := "slider-label-right")(text("Max"))
+              )
+            ),
+            div(`class` := "adjust-colors-row")(
               button(
                 `class` := "is-primary",
                 onClick(PbnMsg.Generate)

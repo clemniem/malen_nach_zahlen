@@ -282,8 +282,30 @@ button:active { transform: scale(0.98); }
   background: #fff;
 }
 
+/* ========== Slider with labels ========== */
+.slider-with-labels {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.slider-with-labels .color-slider {
+  flex: 1;
+}
+
+.slider-label-left,
+.slider-label-right {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 /* ========== Adjust colors ========== */
 .adjust-colors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   padding: 1rem 0;
 }
 
@@ -295,7 +317,7 @@ button:active { transform: scale(0.98); }
 
 .adjust-colors-row .label-block {
   white-space: nowrap;
-  min-width: 5.5rem;
+  min-width: 7rem;
 }
 
 .adjust-colors-row .color-slider {
@@ -306,6 +328,10 @@ button:active { transform: scale(0.98); }
   padding: 0.4rem 1rem;
   font-size: 0.85rem;
   white-space: nowrap;
+}
+
+.adjust-colors-row .slider-with-labels {
+  flex: 1;
 }
 
 .preview-card-header {

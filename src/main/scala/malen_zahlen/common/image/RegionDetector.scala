@@ -13,13 +13,28 @@ final case class RegionMap(
 
 object RegionDetector {
 
-  private val MinRegionPixels = 20
+  def detect(grid: PixelGrid, palette: Vector[Rgb], minRegionPixels: Int, smoothRadius: Int): RegionMap = {
+    val colorIndexRaw = assignColors(grid, palette)
+    val colorIndex    = if (smoothRadius <= 0) colorIndexRaw else modeFilter(colorIndexRaw, grid.width, grid.height, smoothRadius)
+    val labels        = labelRegions(grid.width, grid.height, colorIndex)
+    val regionCount  = if (labels.isEmpty) 0 else labels.max + 1
+    mergeSmallRegions(grid.width, grid.height, labels, colorIndex, palette, regionCount, minRegionPixels)
+  }
 
-  def detect(grid: PixelGrid, palette: Vector[Rgb]): RegionMap = {
-    val colorIndex  = assignColors(grid, palette)
-    val labels      = labelRegions(grid.width, grid.height, colorIndex)
-    val regionCount = if (labels.isEmpty) 0 else labels.max + 1
-    mergeSmallRegions(grid.width, grid.height, labels, colorIndex, palette, regionCount)
+  private def modeFilter(colorIndex: Array[Int], w: Int, h: Int, radius: Int): Array[Int] = {
+    val out = new Array[Int](w * h)
+    val r   = radius
+    (0 until h).foreach { y =>
+      (0 until w).foreach { x =>
+        val neighbors = for {
+          dy <- (-r).max(-y) to r.min(h - 1 - y)
+          dx <- (-r).max(-x) to r.min(w - 1 - x)
+        } yield colorIndex((y + dy) * w + (x + dx))
+        val mode = neighbors.groupBy(identity).view.mapValues(_.size).maxByOption(_._2).fold(colorIndex(y * w + x))(_._1)
+        out(y * w + x) = mode
+      }
+    }
+    out
   }
 
   def assignColors(grid: PixelGrid, palette: Vector[Rgb]): Array[Int] =
@@ -77,7 +92,8 @@ object RegionDetector {
       labels: Array[Int],
       colorIndex: Array[Int],
       palette: Vector[Rgb],
-      regionCount: Int
+      regionCount: Int,
+      minRegionPixels: Int
   ): RegionMap = {
     val sizes       = new Array[Int](regionCount)
     val regionColor = new Array[Int](regionCount)
@@ -91,7 +107,7 @@ object RegionDetector {
 
     labels.indices.foreach { i =>
       val rid = labels(i)
-      if (sizes(rid) < MinRegionPixels) {
+      if (sizes(rid) < minRegionPixels) {
         val x = i % w
         val y = i / w
         List(

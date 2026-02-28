@@ -80,23 +80,57 @@ object PbnRenderer {
   }
 
   private def drawNumbers(ctx: CanvasRenderingContext2D, rm: RegionMap): Unit = {
-    val centroids = computeCentroids(rm)
-    val fontSize  = Math.max(8, Math.min(rm.width, rm.height) / 50)
-    ctx.font = s"bold ${fontSize}px sans-serif"
-    ctx.textAlign = "center"
-    ctx.textBaseline = "middle"
+    val centroids     = computeCentroids(rm)
+    val minDistToEdge = computeMinDistanceToBoundary(rm, centroids)
 
     centroids.foreach { case (regionId, (cx, cy)) =>
-      val colorIdx = rm.colorIndices(regionId)
-      val label    = (colorIdx + 1).toString
-      ctx.fillStyle = "white"
-      ctx.fillText(label, cx - 1, cy)
-      ctx.fillText(label, cx + 1, cy)
-      ctx.fillText(label, cx, cy - 1)
-      ctx.fillText(label, cx, cy + 1)
-      ctx.fillStyle = "black"
-      ctx.fillText(label, cx, cy)
+      val safeRadius = minDistToEdge.getOrElse(regionId, 0.0)
+      val fontSize   = fontSizeToFitInRegion(safeRadius)
+      if (fontSize >= 6) {
+        val colorIdx = rm.colorIndices(regionId)
+        val label    = (colorIdx + 1).toString
+        ctx.font = s"bold ${fontSize}px sans-serif"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillStyle = "white"
+        ctx.fillText(label, cx - 1, cy)
+        ctx.fillText(label, cx + 1, cy)
+        ctx.fillText(label, cx, cy - 1)
+        ctx.fillText(label, cx, cy + 1)
+        ctx.fillStyle = "black"
+        ctx.fillText(label, cx, cy)
+      }
     }
+  }
+
+  private def fontSizeToFitInRegion(minDistToBoundary: Double): Int = {
+    if (minDistToBoundary <= 2) 0
+    else {
+      val size = (minDistToBoundary * 0.85).toInt
+      Math.max(6, Math.min(14, size))
+    }
+  }
+
+  private def computeMinDistanceToBoundary(rm: RegionMap, centroids: Map[Int, (Double, Double)]): Map[Int, Double] = {
+    val w       = rm.width
+    val h       = rm.height
+    val minDist = Array.fill(rm.regionCount)(Double.MaxValue)
+    (0 until h).foreach { y =>
+      (0 until w).foreach { x =>
+        val i   = y * w + x
+        val rid = rm.labels(i)
+        if (isOutlinePixel(x, y, w, h, rm.labels)) {
+          centroids.get(rid).foreach { case (cx, cy) =>
+            val d = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))
+            if (d < minDist(rid)) minDist(rid) = d
+          }
+        }
+      }
+    }
+    minDist.indices
+      .filter(rid => minDist(rid) < Double.MaxValue)
+      .map(rid => rid -> minDist(rid))
+      .toMap
   }
 
   private def computeCentroids(rm: RegionMap): Map[Int, (Double, Double)] = {

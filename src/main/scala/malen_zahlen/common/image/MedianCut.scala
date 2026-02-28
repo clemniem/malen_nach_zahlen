@@ -4,12 +4,15 @@ final case class Rgb(r: Int, g: Int, b: Int)
 
 object MedianCut {
 
+  private val SaturationBoost = 2.2
+  private val ContrastFactor  = 1.18
+
   def quantize(grid: PixelGrid, numColors: Int): Vector[Rgb] = {
     val indices = Vector.tabulate(grid.pixelCount)(identity)
     if (indices.isEmpty) Vector.empty
     else {
       val boxes = split(grid, Vector(indices), numColors)
-      boxes.map(box => averageColor(grid, box))
+      boxes.map(box => boostVibrancy(averageColor(grid, box)))
     }
   }
 
@@ -71,4 +74,17 @@ object MedianCut {
     val n = box.size
     Rgb((rSum / n).toInt, (gSum / n).toInt, (bSum / n).toInt)
   }
+
+  private def boostVibrancy(c: Rgb): Rgb = {
+    val gray = (c.r + c.g + c.b) / 3.0
+    val r0  = gray + (c.r - gray) * SaturationBoost
+    val g0  = gray + (c.g - gray) * SaturationBoost
+    val b0  = gray + (c.b - gray) * SaturationBoost
+    val r1  = 128 + (r0 - 128) * ContrastFactor
+    val g1  = 128 + (g0 - 128) * ContrastFactor
+    val b1  = 128 + (b0 - 128) * ContrastFactor
+    Rgb(clamp(r1.round.toInt), clamp(g1.round.toInt), clamp(b1.round.toInt))
+  }
+
+  private def clamp(v: Int): Int = Math.max(0, Math.min(255, v))
 }
