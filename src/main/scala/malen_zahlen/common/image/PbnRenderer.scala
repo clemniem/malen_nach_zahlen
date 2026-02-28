@@ -6,13 +6,17 @@ import scala.scalajs.js.typedarray.Uint8ClampedArray
 object PbnRenderer {
 
   def render(regionMap: RegionMap): PbnResult = {
-    val outlineUrl     = renderOutline(regionMap)
-    val coloredUrl     = renderColored(regionMap, drawOutlines = true)
-    val coloredFlatUrl = renderColored(regionMap, drawOutlines = false)
+    val outlineUrl      = renderOutline(regionMap)
+    val outlineOnlyUrl  = renderOutlineOnly(regionMap)
+    val placements      = computeNumberPlacements(regionMap)
+    val coloredUrl      = renderColored(regionMap, drawOutlines = true)
+    val coloredFlatUrl  = renderColored(regionMap, drawOutlines = false)
     PbnResult(
       regionMap.palette,
       regionMap,
       outlineUrl,
+      outlineOnlyUrl,
+      placements,
       coloredUrl,
       coloredFlatUrl,
       regionMap.width,
@@ -21,6 +25,16 @@ object PbnRenderer {
   }
 
   private def renderOutline(rm: RegionMap): String = {
+    val canvas = createOutlineCanvas(rm)
+    val ctx    = canvas.getContext("2d").asInstanceOf[CanvasRenderingContext2D]
+    drawNumbers(ctx, rm)
+    canvas.toDataURL("image/png")
+  }
+
+  private def renderOutlineOnly(rm: RegionMap): String =
+    createOutlineCanvas(rm).toDataURL("image/png")
+
+  private def createOutlineCanvas(rm: RegionMap): HTMLCanvasElement = {
     val w      = rm.width
     val h      = rm.height
     val canvas = document.createElement("canvas").asInstanceOf[HTMLCanvasElement]
@@ -29,7 +43,6 @@ object PbnRenderer {
     val ctx     = canvas.getContext("2d").asInstanceOf[CanvasRenderingContext2D]
     val imgData = ctx.createImageData(w, h)
     val data    = imgData.data.asInstanceOf[Uint8ClampedArray]
-
     (0 until w * h).foreach { i =>
       val x        = i % w
       val y        = i / w
@@ -42,8 +55,21 @@ object PbnRenderer {
       }
     }
     ctx.putImageData(imgData, 0, 0)
-    drawNumbers(ctx, rm)
-    canvas.toDataURL("image/png")
+    canvas
+  }
+
+  private def computeNumberPlacements(rm: RegionMap): Vector[NumberPlacement] = {
+    val centroids     = computeCentroids(rm)
+    val minDistToEdge = computeMinDistanceToBoundary(rm, centroids)
+    centroids.toVector.flatMap { case (regionId, (cx, cy)) =>
+      val safeRadius = minDistToEdge.getOrElse(regionId, 0.0)
+      val fontSize   = fontSizeToFitInRegion(safeRadius)
+      if (fontSize >= 6) {
+        val colorIdx = rm.colorIndices(regionId)
+        val label    = (colorIdx + 1).toString
+        Some(NumberPlacement(cx, cy, fontSize, label))
+      } else None
+    }
   }
 
   private def renderColored(rm: RegionMap, drawOutlines: Boolean): String = {
