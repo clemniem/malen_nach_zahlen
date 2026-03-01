@@ -356,26 +356,31 @@ object PaintByNumbersScreen extends Screen {
     }
 
   private def generatePdf(result: PbnResult): Unit = {
-    val pageW   = 210.0
-    val pageH   = 297.0
-    val margin  = 5.0
-    val usableW = pageW - 2 * margin
-    val legendReservedMm = 50.0
-    val usableH = pageH - 2 * margin - legendReservedMm
+    val pageW = 210.0
+    val pageH = 297.0
+
+    val page1Margin = 18.0
+    val page1UsableW = pageW - 2 * page1Margin
+
+    val page1Instr = List(
+      Instruction.PageSize(pageW, pageH),
+      Instruction.FontSize(22),
+      Instruction.TextCentered(pageW / 2, page1Margin + 8, "Paint by Numbers"),
+      Instruction.FontSize(11),
+      Instruction.Text(page1Margin, page1Margin + 22, "Instructions:"),
+      Instruction.Text(page1Margin, page1Margin + 30, "1. Use the color legend below to match each number to its color."),
+      Instruction.Text(page1Margin, page1Margin + 38, "2. On the next page, fill each numbered region with the matching color."),
+      Instruction.Text(page1Margin, page1Margin + 46, "3. Use coloured pencils, markers, or paint to complete your picture.")
+    ) ++ legendInstructions(result, page1Margin, page1Margin + 58, page1UsableW)
+
+    val addPage2 = List(Instruction.AddPage)
 
     val imgAspect = result.imageWidth.toDouble / result.imageHeight.toDouble
     val (imgW, imgH) =
-      if (usableW / imgAspect <= usableH) (usableW, usableW / imgAspect)
-      else (usableH * imgAspect, usableH)
-
-    val imgX = margin + (usableW - imgW) / 2
-    val imgY = margin
-
-    val legendGap = 5.0
-    val legendStartY = imgY + imgH + legendGap
-    val legendFits   = legendStartY + 45 < pageH - margin
-
-    val pageInstr = List(Instruction.PageSize(pageW, pageH))
+      if (pageW / imgAspect <= pageH) (pageW, pageW / imgAspect)
+      else (pageH * imgAspect, pageH)
+    val imgX = (pageW - imgW) / 2
+    val imgY = (pageH - imgH) / 2
 
     val imageInstr = List(
       Instruction.AddImage(result.outlineOnlyDataUrl, imgX, imgY, imgW, imgH)
@@ -391,13 +396,9 @@ object PaintByNumbersScreen extends Screen {
       List(Instruction.FontSize(pt), Instruction.TextCentered(xMm, yMm + baselineOffsetMm, p.label))
     }.toList
 
-    val legendInstr =
-      if (legendFits) legendInstructions(result, margin, legendStartY, usableW)
-      else List(Instruction.AddPage) ++ legendInstructions(result, margin, margin, usableW)
-
     val saveInstr = List(Instruction.Save("paint-by-numbers.pdf"))
 
-    JsPDF.run(pageInstr ++ imageInstr ++ numberInstr ++ legendInstr ++ saveInstr)
+    JsPDF.run(page1Instr ++ addPage2 ++ imageInstr ++ numberInstr ++ saveInstr)
   }
 
   private def legendInstructions(
