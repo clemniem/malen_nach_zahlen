@@ -370,8 +370,11 @@ object PaintByNumbersScreen extends Screen {
       Instruction.Text(page1Margin, page1Margin + 22, "Instructions:"),
       Instruction.Text(page1Margin, page1Margin + 30, "1. Use the color legend below to match each number to its color."),
       Instruction.Text(page1Margin, page1Margin + 38, "2. On the next page, fill each numbered region with the matching color."),
-      Instruction.Text(page1Margin, page1Margin + 46, "3. Use coloured pencils, markers, or paint to complete your picture.")
-    ) ++ legendInstructions(result, page1Margin, page1Margin + 58, page1UsableW)
+      Instruction.Text(page1Margin, page1Margin + 46, "3. The lines mark the borders between regions. You can draw them in the"),
+      Instruction.Text(page1Margin, page1Margin + 52, "   color of the region inside or outside—many people color up to the line"),
+      Instruction.Text(page1Margin, page1Margin + 58, "   so the line becomes the color of the area they are filling."),
+      Instruction.Text(page1Margin, page1Margin + 66, "4. Use coloured pencils, markers, or paint to complete your picture.")
+    ) ++ legendInstructions(result, page1Margin, page1Margin + 76, page1UsableW)
 
     val addPage2 = List(Instruction.AddPage)
 
